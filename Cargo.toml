@@ -1,0 +1,10 @@
+[package]
+name = "harbor"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+globset = "0.4.20"
+notify = "8.2.0"
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.4"
