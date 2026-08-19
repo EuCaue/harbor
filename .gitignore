@@ -1,0 +1,6 @@
+/target
+
+# Test directories
+test/incoming/
+test/downloads/
+test/organized/

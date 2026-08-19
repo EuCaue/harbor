@@ -1,0 +1,51 @@
+# Config de teste do harbor
+# watch: $HOME/code/harbor/test/downloads -> organiza em .../organized/<Categoria>
+# usa $HOME pra validar expansão de env vars
+
+[defaults]
+cooldown_secs = 2
+dedup = true
+
+[ignore]
+patterns = ["*.part", "*.crdownload", "*.tmp"]
+
+[[watch]]
+dir = "$HOME/code/harbor/test/downloads"
+
+  [watch.defaults]
+  dest = "$HOME/code/harbor/test/organized"
+
+  [[watch.rules]]
+  name = "Imagens"
+  pattern = "*.{jpg,png,gif,webp,svg,bmp}"
+  dest = "$HOME/code/harbor/test/organized/Images"
+
+  [[watch.rules]]
+  name = "Documentos"
+  pattern = "*.{pdf,epub,djvu,txt,md,docx,pptx,xlsx,odt}"
+  dest = "$HOME/code/harbor/test/organized/Documents"
+
+  [[watch.rules]]
+  name = "Arquivos"
+  pattern = "*.{zip,tar.gz,tgz,7z,rar}"
+  dest = "$HOME/code/harbor/test/organized/Archives"
+
+  [[watch.rules]]
+  name = "Musica"
+  pattern = "*.{mp3,flac,wav,ogg,m4a}"
+  dest = "$HOME/code/harbor/test/organized/Music"
+
+  [[watch.rules]]
+  name = "Videos"
+  pattern = "*.{mp4,mkv,avi,mov,webm}"
+  dest = "$HOME/code/harbor/test/organized/Videos"
+
+  [[watch.rules]]
+  name = "Apps"
+  pattern = "*.{exe,deb,AppImage,msi,apk}"
+  dest = "$HOME/code/harbor/test/organized/Applications"
+
+  [[watch.rules]]
+  name = "Outros"
+  pattern = "*"
+  dest = "$HOME/code/harbor/test/organized/Misc"
