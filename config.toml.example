@@ -1,0 +1,75 @@
+# Global defaults. All watched dirs inherit these.
+# Env vars ($VAR or ${VAR}) expand in `dir` and `dest`. Missing stay literal.
+# First matching rule wins.
+[defaults]
+dest = "$HOME/Downloads/organized"
+mode = "move"              # move | copy
+cooldown_secs = 5          # wait stable file size (skip active downloads)
+dedup = true               # collision = name_1.ext, name_2.ext...
+
+[ignore]
+patterns = ["*.part", "*.crdownload", "*.tmp", ".*"]
+
+# ------------------------------------------------------------
+# Watched dirs. Always [[watch]], even if just one.
+# ------------------------------------------------------------
+
+[[watch]]
+dir = "$HOME/Downloads"
+
+  [watch.defaults]         # override global per-field
+  cooldown_secs = 15
+
+  [watch.ignore]           # appends to global ignore
+  patterns = ["*.srt"]
+
+  [[watch.rules]]
+  name = "Photos"          # optional log label
+  pattern = "*.{jpg,png,gif,webp}"
+  dest = "$HOME/Pictures"
+
+  [[watch.rules]]
+  pattern = "*.{pdf,epub,djvu}"
+  dest = "$HOME/Documents"
+
+  [[watch.rules]]
+  pattern = "*.{zip,tar.gz,7z}"
+  dest = "$HOME/Archives"
+
+  [[watch.rules]]          # fallback catch-all
+  pattern = "*"
+  dest = "$HOME/Downloads/organized"
+
+[[watch]]
+dir = "$HOME/work/inbox"
+
+  [watch.defaults]
+  mode = "copy"            # keep inbox full
+  dedup = false            # overwrite on collision
+
+  [watch.ignore]
+  patterns = ["*.pending"]
+
+  [[watch.rules]]
+  pattern = "invoice-*"
+  dest = "$HOME/work/invoices"
+
+  [[watch.rules]]
+  pattern = "*"
+  dest = "$HOME/work/misc"
+
+[[watch]]
+dir = "/mnt/usb/phone-dump"
+
+  [watch.defaults]
+  cooldown_secs = 0        # usb copy done; move now
+
+  [[watch.rules]]
+  pattern = "*"
+  dest = "$HOME/Phone"
+
+# ------------------------------------------------------------
+# Minimum setup: one dir, zero rules -> all to global dest
+# ------------------------------------------------------------
+# [[watch]]
+# dir = "$HOME/Downloads"
