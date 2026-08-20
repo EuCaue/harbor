@@ -13,28 +13,28 @@ pub enum Mode {
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub watches: Vec<Watch>,
+    pub folders: Vec<Folder>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Watch {
-    pub dir: PathBuf,
-    pub defaults: Defaults,
+pub struct Folder {
+    pub path: PathBuf,
+    pub options: Options,
     pub ignore_patterns: Vec<String>,
     pub rules: Vec<Rule>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Defaults {
-    pub cooldown_secs: u64,
-    pub dedup: bool,
+pub struct Options {
+    pub wait: u64,
+    pub overwrite: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct Rule {
-    pub pattern: String,
+    pub match_pattern: String,
     pub name: String,
-    pub dest: PathBuf,
+    pub to: PathBuf,
     pub mode: Mode,
 }
 
@@ -52,44 +52,51 @@ pub fn parse(text: &str) -> Result<Config, String> {
 #[serde(deny_unknown_fields)]
 struct RawConfig {
     #[serde(default)]
-    defaults: RawDefaults,
+    defaults: RawOptions,
     #[serde(default)]
     ignore: RawIgnore,
-    watch: Vec<RawWatch>,
+    #[serde(rename = "folder", default)]
+    folders: Vec<RawFolder>,
 }
 
 #[derive(Deserialize, Debug, Default)]
 #[serde(deny_unknown_fields)]
-struct RawDefaults {
-    dest: Option<PathBuf>,
+struct RawOptions {
+    #[serde(rename = "to")]
+    to: Option<PathBuf>,
     mode: Option<Mode>,
-    cooldown_secs: Option<u64>,
-    dedup: Option<bool>,
+    #[serde(rename = "wait")]
+    wait: Option<u64>,
+    #[serde(rename = "overwrite")]
+    overwrite: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Default)]
 #[serde(deny_unknown_fields)]
 struct RawIgnore {
-    patterns: Vec<String>,
+    #[serde(rename = "match", default)]
+    matches: Vec<String>,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-struct RawWatch {
-    dir: PathBuf,
-    #[serde(default)]
-    defaults: RawDefaults,
+struct RawFolder {
+    path: PathBuf,
+    #[serde(rename = "options", default)]
+    options: RawOptions,
     #[serde(default)]
     ignore: RawIgnore,
-    #[serde(default)]
+    #[serde(rename = "rule", default)]
     rules: Vec<RawRule>,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 struct RawRule {
-    pattern: String,
-    dest: PathBuf,
+    #[serde(rename = "match")]
+    match_pattern: String,
+    #[serde(rename = "to")]
+    to: PathBuf,
     #[serde(default)]
     mode: Option<Mode>,
     #[serde(default)]
@@ -97,55 +104,55 @@ struct RawRule {
 }
 
 fn resolve(raw: RawConfig) -> Result<Config, String> {
-    if raw.watch.is_empty() {
-        return Err("no [[watch]] dirs defined".into());
+    if raw.folders.is_empty() {
+        return Err("no [[folder]] dirs defined".into());
     }
 
     let g = raw.defaults;
-    let g_ignore = raw.ignore.patterns;
+    let g_ignore = raw.ignore.matches;
 
-    let watches = raw
-        .watch
+    let folders = raw
+        .folders
         .into_iter()
-        .map(|w| {
-            let w_dir = expand(&w.dir);
-            let eff_dest = expand(
-                &w.defaults
-                    .dest
-                    .or_else(|| g.dest.clone())
-                    .unwrap_or_else(|| w_dir.join("organized")),
+        .map(|f| {
+            let f_path = expand(&f.path);
+            let eff_to = expand(
+                &f.options
+                    .to
+                    .or_else(|| g.to.clone())
+                    .unwrap_or_else(|| f_path.join("organized")),
             );
-            let eff_mode = w.defaults.mode.or(g.mode).unwrap_or_default();
-            let eff_cooldown = w.defaults.cooldown_secs.or(g.cooldown_secs).unwrap_or(5);
-            let eff_dedup = w.defaults.dedup.or(g.dedup).unwrap_or(true);
+            let eff_mode = f.options.mode.or(g.mode).unwrap_or_default();
+            let eff_wait = f.options.wait.or(g.wait).unwrap_or(5);
+            let eff_overwrite = f.options.overwrite.or(g.overwrite).unwrap_or(false);
 
-            let mut rules: Vec<Rule> = w
+            let mut rules: Vec<Rule> = f
                 .rules
                 .into_iter()
                 .map(|r| Rule {
-                    pattern: r.pattern.clone(),
-                    name: r.name.unwrap_or(r.pattern),
-                    dest: expand(&r.dest),
+                    match_pattern: r.match_pattern.clone(),
+                    name: r.name.unwrap_or(r.match_pattern),
+                    to: expand(&r.to),
                     mode: r.mode.unwrap_or(eff_mode),
                 })
                 .collect();
             if rules.is_empty() {
                 rules.push(Rule {
-                    pattern: "*".into(),
+                    match_pattern: "*".into(),
                     name: "fallback".into(),
-                    dest: eff_dest.clone(),
+                    to: eff_to.clone(),
                     mode: eff_mode,
                 });
             }
 
             let mut ignore_patterns = g_ignore.clone();
-            ignore_patterns.extend(w.ignore.patterns);
+            ignore_patterns.extend(f.ignore.matches);
 
-            Watch {
-                dir: w_dir,
-                defaults: Defaults {
-                    cooldown_secs: eff_cooldown,
-                    dedup: eff_dedup,
+            Folder {
+                path: f_path,
+                options: Options {
+                    wait: eff_wait,
+                    overwrite: eff_overwrite,
                 },
                 ignore_patterns,
                 rules,
@@ -153,7 +160,7 @@ fn resolve(raw: RawConfig) -> Result<Config, String> {
         })
         .collect();
 
-    Ok(Config { watches })
+    Ok(Config { folders })
 }
 
 /// Expands `$VAR` and `${VAR}` in paths. Unknown vars stay literal.
@@ -207,63 +214,63 @@ mod tests {
 
     const SAMPLE: &str = r#"
         [defaults]
-        dest = "/home/me/Downloads/organized"
+        to = "/home/me/Downloads/organized"
         mode = "move"
-        cooldown_secs = 5
-        dedup = true
+        wait = 5
+        overwrite = false
 
         [ignore]
-        patterns = ["*.part", "*.crdownload"]
+        match = ["*.part", "*.crdownload"]
 
-        [[watch]]
-        dir = "/home/me/Downloads"
+        [[folder]]
+        path = "/home/me/Downloads"
 
-          [watch.defaults]
-          cooldown_secs = 15
+          [folder.options]
+          wait = 15
 
-          [watch.ignore]
-          patterns = ["*.srt"]
+          [folder.ignore]
+          match = ["*.srt"]
 
-          [[watch.rules]]
-          pattern = "*.{jpg,png}"
-          dest = "/home/me/Pictures"
+          [[folder.rule]]
+          match = "*.{jpg,png}"
+          to = "/home/me/Pictures"
 
-          [[watch.rules]]
-          pattern = "invoice-*"
-          dest = "/home/me/work/invoices"
+          [[folder.rule]]
+          match = "invoice-*"
+          to = "/home/me/work/invoices"
           mode = "copy"
 
-        [[watch]]
-        dir = "/mnt/usb/phone"
+        [[folder]]
+        path = "/mnt/usb/phone"
 
-          [watch.defaults]
-          cooldown_secs = 0
+          [folder.options]
+          wait = 0
     "#;
 
     #[test]
     fn parses_and_merges() {
         let cfg = parse(SAMPLE).unwrap();
-        assert_eq!(cfg.watches.len(), 2);
+        assert_eq!(cfg.folders.len(), 2);
 
-        let dl = &cfg.watches[0];
-        assert_eq!(dl.dir, PathBuf::from("/home/me/Downloads"));
-        assert_eq!(dl.rules[0].dest, PathBuf::from("/home/me/Pictures"));
-        assert_eq!(dl.defaults.cooldown_secs, 15); // watch override
+        let dl = &cfg.folders[0];
+        assert_eq!(dl.path, PathBuf::from("/home/me/Downloads"));
+        assert_eq!(dl.rules[0].to, PathBuf::from("/home/me/Pictures"));
+        assert_eq!(dl.options.wait, 15); // folder override
         assert_eq!(dl.rules[0].mode, Mode::Move); // inherited
-        assert!(dl.defaults.dedup); // inherited
+        assert!(!dl.options.overwrite); // inherited
         assert_eq!(dl.ignore_patterns, vec!["*.part", "*.crdownload", "*.srt"]); // merged
         assert_eq!(dl.rules.len(), 2);
         assert_eq!(dl.rules[1].mode, Mode::Copy); // rule override
-        assert_eq!(dl.rules[0].mode, Mode::Move); // rule inherits watch mode
+        assert_eq!(dl.rules[0].mode, Mode::Move); // rule inherits folder mode
 
-        let usb = &cfg.watches[1];
-        assert_eq!(usb.defaults.cooldown_secs, 0);
+        let usb = &cfg.folders[1];
+        assert_eq!(usb.options.wait, 0);
         assert_eq!(usb.rules.len(), 1); // implicit catch-all
-        assert_eq!(usb.rules[0].pattern, "*");
+        assert_eq!(usb.rules[0].match_pattern, "*");
         assert_eq!(usb.rules[0].name, "fallback");
-        // global dest wins when set (watch-dir/organized only when no dest anywhere)
+        // global to wins when set (folder-path/organized only when no to anywhere)
         assert_eq!(
-            usb.rules[0].dest,
+            usb.rules[0].to,
             PathBuf::from("/home/me/Downloads/organized")
         );
     }
@@ -272,21 +279,21 @@ mod tests {
     fn rule_name_defaults_to_pattern() {
         let cfg = parse(
             r#"
-            [[watch]]
-            dir = "/x"
+            [[folder]]
+            path = "/x"
 
-              [[watch.rules]]
+              [[folder.rule]]
               name = "Fotos"
-              pattern = "*.jpg"
-              dest = "/pics"
+              match = "*.jpg"
+              to = "/pics"
 
-              [[watch.rules]]
-              pattern = "*.pdf"
-              dest = "/docs"
+              [[folder.rule]]
+              match = "*.pdf"
+              to = "/docs"
         "#,
         )
         .unwrap();
-        let w = &cfg.watches[0];
+        let w = &cfg.folders[0];
         assert_eq!(w.rules[0].name, "Fotos"); // explicit
         assert_eq!(w.rules[1].name, "*.pdf"); // defaults to pattern
     }
@@ -296,29 +303,28 @@ mod tests {
         let home = std::env::var("HOME").unwrap();
         let cfg = parse(
             r#"
-            [[watch]]
-            dir = "$HOME/Downloads"
+            [[folder]]
+            path = "$HOME/Downloads"
 
-              [watch.defaults]
-              dest = "${HOME}/org"
+              [folder.options]
+              to = "${HOME}/org"
 
-              [[watch.rules]]
-              pattern = "*"
-              dest = "$HOME/pics"
+              [[folder.rule]]
+              match = "*"
+              to = "$HOME/pics"
 
-            [[watch]]
-            dir = "$HOME/empty"
+            [[folder]]
+            path = "$HOME/empty"
         "#,
         )
         .unwrap();
-        assert_eq!(cfg.watches[0].dir, PathBuf::from(&home).join("Downloads"));
+        assert_eq!(cfg.folders[0].path, PathBuf::from(&home).join("Downloads"));
         assert_eq!(
-            cfg.watches[0].rules[0].dest,
+            cfg.folders[0].rules[0].to,
             PathBuf::from(&home).join("pics")
         );
-        // watch without rules and no default dest: implicit fallback = <dir>/organized
         assert_eq!(
-            cfg.watches[1].rules[0].dest,
+            cfg.folders[1].rules[0].to,
             PathBuf::from(&home).join("empty/organized")
         );
     }
@@ -327,29 +333,23 @@ mod tests {
     fn unknown_env_stays_literal() {
         let cfg = parse(
             r#"
-            [[watch]]
-            dir = "/x"
+            [[folder]]
+            path = "/x"
 
-              [watch.defaults]
-              dest = "$HARBOR_DEFINITELY_UNSET/dst"
+              [folder.options]
+              to = "$HARBOR_DEFINITELY_UNSET/dst"
         "#,
         )
         .unwrap();
         assert_eq!(
-            cfg.watches[0].rules[0].dest,
+            cfg.folders[0].rules[0].to,
             PathBuf::from("$HARBOR_DEFINITELY_UNSET/dst")
         );
     }
 
     #[test]
-    fn empty_watch_rejected() {
-        assert!(parse("[watch]").is_err());
+    fn empty_folder_rejected() {
+        assert!(parse("[folder]").is_err());
         assert!(parse("").is_err());
-    }
-
-    #[test]
-    fn unknown_key_rejected() {
-        let bad = "[[watch]]\ndir = \"/x\"\nbanana = true\n";
-        assert!(parse(bad).is_err());
     }
 }

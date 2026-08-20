@@ -44,25 +44,25 @@ Rules match top to bottom. First match wins.
 
 ```toml
 [defaults]
-dest = "$HOME/Downloads/organized"
-cooldown_secs = 5
+to = "$HOME/Downloads/organized"
+wait = 5
 
-[[watch]]
-dir = "$HOME/Downloads"
+[[folder]]
+path = "$HOME/Downloads"
 
-  [[watch.rules]]
-  pattern = "*.{jpg,png}"
-  dest = "$HOME/Pictures"
+  [[folder.rule]]
+  match = "*.{jpg,png}"
+  to = "$HOME/Pictures"
 
-  [[watch.rules]]
-  pattern = "*"
-  dest = "$HOME/Misc"
+  [[folder.rule]]
+  match = "*"
+  to = "$HOME/Misc"
 ```
 
 ## Core Behavior
 
 * **Cooldown:** Waits for file size to stop changing. No moving half-downloaded files.
-* **Dedup:** Conflict? Harbor renames to `name_1.ext`. Or set `dedup = false` to overwrite.
+* **Dedup:** Conflict? Harbor renames to `name_1.ext`. Or set `overwrite = true` to overwrite.
 * **Cross-device:** Uses atomic `rename`. Falls back to copy+delete across partitions.
 * **Ignore:** Skips `*.part` or `*.tmp` out of the box.
 

@@ -1,51 +1,50 @@
 # Config de teste do harbor
-# watch: $HOME/code/harbor/test/downloads -> organiza em .../organized/<Categoria>
-# usa $HOME pra validar expansão de env vars
+# folder: $HOME/code/harbor/test/downloads -> organiza em .../organized/<Categoria>
 
 [defaults]
-cooldown_secs = 2
-dedup = true
+wait = 2
+overwrite = false
 
 [ignore]
-patterns = ["*.part", "*.crdownload", "*.tmp"]
+match = ["*.part", "*.crdownload", "*.tmp"]
 
-[[watch]]
-dir = "$HOME/code/harbor/test/downloads"
+[[folder]]
+path = "$HOME/code/harbor/test/downloads"
 
-  [watch.defaults]
-  dest = "$HOME/code/harbor/test/organized"
+  [folder.options]
+  to = "$HOME/code/harbor/test/organized"
 
-  [[watch.rules]]
+  [[folder.rule]]
   name = "Imagens"
-  pattern = "*.{jpg,png,gif,webp,svg,bmp}"
-  dest = "$HOME/code/harbor/test/organized/Images"
+  match = "*.{jpg,png,gif,webp,svg,bmp}"
+  to = "$HOME/code/harbor/test/organized/Images"
 
-  [[watch.rules]]
+  [[folder.rule]]
   name = "Documentos"
-  pattern = "*.{pdf,epub,djvu,txt,md,docx,pptx,xlsx,odt}"
-  dest = "$HOME/code/harbor/test/organized/Documents"
+  match = "*.{pdf,epub,djvu,txt,md,docx,pptx,xlsx,odt}"
+  to = "$HOME/code/harbor/test/organized/Documents"
 
-  [[watch.rules]]
+  [[folder.rule]]
   name = "Arquivos"
-  pattern = "*.{zip,tar.gz,tgz,7z,rar}"
-  dest = "$HOME/code/harbor/test/organized/Archives"
+  match = "*.{zip,tar.gz,tgz,7z,rar}"
+  to = "$HOME/code/harbor/test/organized/Archives"
 
-  [[watch.rules]]
+  [[folder.rule]]
   name = "Musica"
-  pattern = "*.{mp3,flac,wav,ogg,m4a}"
-  dest = "$HOME/code/harbor/test/organized/Music"
+  match = "*.{mp3,flac,wav,ogg,m4a}"
+  to = "$HOME/code/harbor/test/organized/Music"
 
-  [[watch.rules]]
+  [[folder.rule]]
   name = "Videos"
-  pattern = "*.{mp4,mkv,avi,mov,webm}"
-  dest = "$HOME/code/harbor/test/organized/Videos"
+  match = "*.{mp4,mkv,avi,mov,webm}"
+  to = "$HOME/code/harbor/test/organized/Videos"
 
-  [[watch.rules]]
+  [[folder.rule]]
   name = "Apps"
-  pattern = "*.{exe,deb,AppImage,msi,apk}"
-  dest = "$HOME/code/harbor/test/organized/Applications"
+  match = "*.{exe,deb,AppImage,msi,apk}"
+  to = "$HOME/code/harbor/test/organized/Applications"
 
-  [[watch.rules]]
+  [[folder.rule]]
   name = "Outros"
-  pattern = "*"
-  dest = "$HOME/code/harbor/test/organized/Misc"
+  match = "*"
+  to = "$HOME/code/harbor/test/organized/Misc"

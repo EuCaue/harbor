@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use globset::{Glob, GlobMatcher};
 
-use crate::config::{Mode, Watch};
+use crate::config::{Mode, Folder};
 
 #[derive(Clone)]
 pub struct CompiledRule {
@@ -13,7 +13,7 @@ pub struct CompiledRule {
 }
 
 impl CompiledRule {
-    pub fn dest(&self) -> &Path {
+    pub fn to(&self) -> &Path {
         &self.dest
     }
 
@@ -27,31 +27,31 @@ impl CompiledRule {
 }
 
 #[derive(Clone)]
-pub struct WatchRules {
+pub struct FolderRules {
     rules: Vec<CompiledRule>,
     ignore: Vec<GlobMatcher>,
 }
 
-impl WatchRules {
-    pub fn build(watch: &Watch) -> WatchRules {
-        let rules = watch
+impl FolderRules {
+    pub fn build(folder: &Folder) -> FolderRules {
+        let rules = folder
             .rules
             .iter()
             .filter_map(|r| {
-                glob(&r.pattern).map(|matcher| CompiledRule {
+                glob(&r.match_pattern).map(|matcher| CompiledRule {
                     matcher,
                     name: r.name.clone(),
-                    dest: r.dest.clone(),
+                    dest: r.to.clone(),
                     mode: r.mode,
                 })
             })
             .collect();
-        let ignore = watch
+        let ignore = folder
             .ignore_patterns
             .iter()
             .filter_map(|p| glob(p))
             .collect();
-        WatchRules { rules, ignore }
+        FolderRules { rules, ignore }
     }
 
     pub fn ignored(&self, name: &str) -> bool {
@@ -71,66 +71,66 @@ fn glob(p: &str) -> Option<GlobMatcher> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{parse, Watch};
+    use crate::config::{parse, Folder};
 
-    fn watch() -> Watch {
+    fn folder() -> Folder {
         parse(
             r#"
             [ignore]
-            patterns = ["*.part"]
+            match = ["*.part"]
 
-            [[watch]]
-            dir = "/x"
+            [[folder]]
+            path = "/x"
 
-              [watch.defaults]
-              cooldown_secs = 0
+              [folder.options]
+              wait = 0
 
-              [watch.ignore]
-              patterns = [".*"]
+              [folder.ignore]
+              match = [".*"]
 
-              [[watch.rules]]
+              [[folder.rule]]
               name = "Fotos"
-              pattern = "*.{jpg,png}"
-              dest = "/pics"
+              match = "*.{jpg,png}"
+              to = "/pics"
 
-              [[watch.rules]]
-              pattern = "invoice-*"
-              dest = "/invoices"
+              [[folder.rule]]
+              match = "invoice-*"
+              to = "/invoices"
               mode = "copy"
 
-              [[watch.rules]]
-              pattern = "*"
-              dest = "/misc"
+              [[folder.rule]]
+              match = "*"
+              to = "/misc"
         "#,
         )
         .unwrap()
-        .watches
+        .folders
         .remove(0)
     }
 
     #[test]
     fn first_match_wins() {
-        let wr = WatchRules::build(&watch());
+        let wr = FolderRules::build(&folder());
         let r = wr.find("photo.jpg").unwrap();
-        assert_eq!(r.dest(), Path::new("/pics"));
+        assert_eq!(r.to(), Path::new("/pics"));
         assert_eq!(r.mode(), Mode::Move);
         assert_eq!(r.name(), "Fotos");
 
         let r = wr.find("invoice-9.txt").unwrap();
-        assert_eq!(r.dest(), Path::new("/invoices"));
+        assert_eq!(r.to(), Path::new("/invoices"));
         assert_eq!(r.mode(), Mode::Copy);
     }
 
     #[test]
     fn fallback_star() {
-        let wr = WatchRules::build(&watch());
+        let wr = FolderRules::build(&folder());
         let r = wr.find("random.pdf").unwrap();
-        assert_eq!(r.dest(), Path::new("/misc"));
+        assert_eq!(r.to(), Path::new("/misc"));
     }
 
     #[test]
     fn ignored_matches_global_and_local() {
-        let wr = WatchRules::build(&watch());
+        let wr = FolderRules::build(&folder());
         assert!(wr.ignored("x.part")); // global
         assert!(wr.ignored(".hidden")); // local
         assert!(!wr.ignored("photo.jpg"));

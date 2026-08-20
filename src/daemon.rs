@@ -8,9 +8,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use notify::event::ModifyKind;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
-use crate::config::Watch;
+use crate::config::Folder;
 use crate::files;
-use crate::rules::WatchRules;
+use crate::rules::FolderRules;
 
 enum Msg {
     File(PathBuf),
@@ -23,21 +23,21 @@ struct Row {
     dest: String,
 }
 
-pub fn start(watches: Vec<Watch>) -> Result<(), String> {
+pub fn start(folders: Vec<Folder>) -> Result<(), String> {
     let (tx, rx) = mpsc::channel::<Msg>();
     let mut watchers = Vec::new();
-    for w in &watches {
+    for w in &folders {
         let tx = tx.clone();
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             let ev = match res {
                 Ok(e) => e,
                 Err(e) => {
-                    eprintln!("watch error: {e}");
+                    eprintln!("folder error: {e}");
                     return;
                 }
             };
             match ev.kind {
-                // mv/rename into the dir = Modify(Name), not Create
+                // mv/rename into the path = Modify(Name), not Create
                 EventKind::Create(_)
                 | EventKind::Modify(ModifyKind::Data(_))
                 | EventKind::Modify(ModifyKind::Name(_)) => {
@@ -52,14 +52,14 @@ pub fn start(watches: Vec<Watch>) -> Result<(), String> {
         })
         .map_err(|e| format!("watcher: {e}"))?;
         watcher
-            .watch(&w.dir, RecursiveMode::NonRecursive)
-            .map_err(|e| format!("watch {}: {}", w.dir.display(), e))?;
+            .watch(&w.path, RecursiveMode::NonRecursive)
+            .map_err(|e| format!("folder {}: {}", w.path.display(), e))?;
         watchers.push(watcher);
     }
     let tx_run = tx.clone();
     drop(tx);
 
-    thread::spawn(move || run(rx, watches, watchers, tx_run));
+    thread::spawn(move || run(rx, folders, watchers, tx_run));
     Ok(())
 }
 
@@ -68,14 +68,14 @@ const FLUSH_BATCH: usize = 50;
 
 fn run(
     rx: mpsc::Receiver<Msg>,
-    watches: Vec<Watch>,
+    folders: Vec<Folder>,
     watchers: Vec<RecommendedWatcher>,
     tx: mpsc::Sender<Msg>,
 ) {
     let _watchers = watchers;
 
     let pending: Arc<Mutex<HashSet<PathBuf>>> = Arc::new(Mutex::new(HashSet::new()));
-    let compiled: Vec<WatchRules> = watches.iter().map(WatchRules::build).collect();
+    let compiled: Vec<FolderRules> = folders.iter().map(FolderRules::build).collect();
     let mut rows: Vec<Row> = Vec::new();
 
     loop {
@@ -84,7 +84,7 @@ fn run(
                 if !pending.lock().unwrap().insert(p.clone()) {
                     continue; // already being processed
                 }
-                let Some(idx) = watches.iter().position(|w| p.starts_with(&w.dir)) else {
+                let Some(idx) = folders.iter().position(|w| p.starts_with(&w.path)) else {
                     pending.lock().unwrap().remove(&p);
                     continue;
                 };
@@ -98,12 +98,12 @@ fn run(
                     continue;
                 }
 
-                let watch = watches[idx].clone();
+                let folder = folders[idx].clone();
                 let wr = compiled[idx].clone();
                 let pending2 = pending.clone();
                 let tx2 = tx.clone();
                 thread::spawn(move || {
-                    process_file(p.clone(), watch, wr, tx2);
+                    process_file(p.clone(), folder, wr, tx2);
                     pending2.lock().unwrap().remove(&p);
                 });
             }
@@ -122,13 +122,13 @@ fn run(
     }
 }
 
-fn process_file(p: PathBuf, watch: Watch, wr: WatchRules, tx: mpsc::Sender<Msg>) {
+fn process_file(p: PathBuf, folder: Folder, wr: FolderRules, tx: mpsc::Sender<Msg>) {
     let name = p
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    let cooldown = Duration::from_secs(watch.defaults.cooldown_secs);
+    let cooldown = Duration::from_secs(folder.options.wait);
     if !wait_stable(&p, cooldown) {
         return; // file vanished or never stabilised
     }
@@ -137,7 +137,7 @@ fn process_file(p: PathBuf, watch: Watch, wr: WatchRules, tx: mpsc::Sender<Msg>)
         return;
     };
 
-    match files::apply(&p, rule.dest(), rule.mode(), watch.defaults.dedup) {
+    match files::apply(&p, rule.to(), rule.mode(), !folder.options.overwrite) {
         Ok(dst) => {
             let row = Row {
                 rule: rule.name().to_string(),
@@ -289,18 +289,18 @@ mod tests {
     fn start_with(src: &Path, dst: &Path) {
         let cfg = parse(&format!(
             r#"
-            [[watch]]
-            dir = "{}"
+            [[folder]]
+            path = "{}"
 
-              [watch.defaults]
-              dest = "{}"
-              cooldown_secs = 1
+              [folder.options]
+              to = "{}"
+              wait = 1
         "#,
             src.display(),
             dst.display()
         ))
         .unwrap();
-        start(cfg.watches).unwrap()
+        start(cfg.folders).unwrap()
     }
 
     fn wait_for(path: &Path, timeout_secs: u64) -> bool {
@@ -338,7 +338,7 @@ mod tests {
         fs::write(staging.join("thing.txt"), b"data").unwrap();
         fs::rename(staging.join("thing.txt"), src.join("thing.txt")).unwrap();
         let moved = wait_for(&dst.join("thing.txt"), 10);
-        assert!(moved, "file never moved after rename into watched dir");
+        assert!(moved, "file never moved after rename into foldered dir");
         assert!(!src.join("thing.txt").exists());
     }
 

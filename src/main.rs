@@ -11,8 +11,8 @@ fn main() {
         eprintln!("harbor: {e}");
         std::process::exit(1);
     });
-    let n = cfg.watches.len();
-    daemon::start(cfg.watches).unwrap_or_else(|e| {
+    let n = cfg.folders.len();
+    daemon::start(cfg.folders).unwrap_or_else(|e| {
         eprintln!("harbor: {e}");
         std::process::exit(1);
     });

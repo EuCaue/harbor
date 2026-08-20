@@ -1,75 +1,75 @@
-# Global defaults. All watched dirs inherit these.
-# Env vars ($VAR or ${VAR}) expand in `dir` and `dest`. Missing stay literal.
+# Global defaults. All watched folders inherit these.
+# Env vars ($VAR or ${VAR}) expand in `path` and `to`. Missing stay literal.
 # First matching rule wins.
 [defaults]
-dest = "$HOME/Downloads/organized"
+to = "$HOME/Downloads/organized"
 mode = "move"              # move | copy
-cooldown_secs = 5          # wait stable file size (skip active downloads)
-dedup = true               # collision = name_1.ext, name_2.ext...
+wait = 5                   # wait stable file size (skip active downloads)
+overwrite = false          # false = collision renames to name_1.ext, name_2.ext...
 
 [ignore]
-patterns = ["*.part", "*.crdownload", "*.tmp", ".*"]
+match = ["*.part", "*.crdownload", "*.tmp", ".*"]
 
 # ------------------------------------------------------------
-# Watched dirs. Always [[watch]], even if just one.
+# Watched folders. Always [[folder]], even if just one.
 # ------------------------------------------------------------
 
-[[watch]]
-dir = "$HOME/Downloads"
+[[folder]]
+path = "$HOME/Downloads"
 
-  [watch.defaults]         # override global per-field
-  cooldown_secs = 15
+  [folder.options]         # override global per-field
+  wait = 15
 
-  [watch.ignore]           # appends to global ignore
-  patterns = ["*.srt"]
+  [folder.ignore]          # appends to global ignore
+  match = ["*.srt"]
 
-  [[watch.rules]]
+  [[folder.rule]]
   name = "Photos"          # optional log label
-  pattern = "*.{jpg,png,gif,webp}"
-  dest = "$HOME/Pictures"
+  match = "*.{jpg,png,gif,webp}"
+  to = "$HOME/Pictures"
 
-  [[watch.rules]]
-  pattern = "*.{pdf,epub,djvu}"
-  dest = "$HOME/Documents"
+  [[folder.rule]]
+  match = "*.{pdf,epub,djvu}"
+  to = "$HOME/Documents"
 
-  [[watch.rules]]
-  pattern = "*.{zip,tar.gz,7z}"
-  dest = "$HOME/Archives"
+  [[folder.rule]]
+  match = "*.{zip,tar.gz,7z}"
+  to = "$HOME/Archives"
 
-  [[watch.rules]]          # fallback catch-all
-  pattern = "*"
-  dest = "$HOME/Downloads/organized"
+  [[folder.rule]]          # fallback catch-all
+  match = "*"
+  to = "$HOME/Downloads/organized"
 
-[[watch]]
-dir = "$HOME/work/inbox"
+[[folder]]
+path = "$HOME/work/inbox"
 
-  [watch.defaults]
+  [folder.options]
   mode = "copy"            # keep inbox full
-  dedup = false            # overwrite on collision
+  overwrite = true         # overwrite on collision
 
-  [watch.ignore]
-  patterns = ["*.pending"]
+  [folder.ignore]
+  match = ["*.pending"]
 
-  [[watch.rules]]
-  pattern = "invoice-*"
-  dest = "$HOME/work/invoices"
+  [[folder.rule]]
+  match = "invoice-*"
+  to = "$HOME/work/invoices"
 
-  [[watch.rules]]
-  pattern = "*"
-  dest = "$HOME/work/misc"
+  [[folder.rule]]
+  match = "*"
+  to = "$HOME/work/misc"
 
-[[watch]]
-dir = "/mnt/usb/phone-dump"
+[[folder]]
+path = "/mnt/usb/phone-dump"
 
-  [watch.defaults]
-  cooldown_secs = 0        # usb copy done; move now
+  [folder.options]
+  wait = 0                 # usb copy done; move now
 
-  [[watch.rules]]
-  pattern = "*"
-  dest = "$HOME/Phone"
+  [[folder.rule]]
+  match = "*"
+  to = "$HOME/Phone"
 
 # ------------------------------------------------------------
-# Minimum setup: one dir, zero rules -> all to global dest
+# Minimum setup: one folder, zero rules -> all to global 'to'
 # ------------------------------------------------------------
-# [[watch]]
-# dir = "$HOME/Downloads"
+# [[folder]]
+# path = "$HOME/Downloads"
