@@ -28,28 +28,29 @@ pub fn start(folders: Vec<Folder>) -> Result<(), String> {
     let mut watchers = Vec::new();
     for w in &folders {
         let tx = tx.clone();
+        let include_dirs = w.options.include_dirs;
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-            let ev = match res {
-                Ok(e) => e,
-                Err(e) => {
-                    eprintln!("folder error: {e}");
-                    return;
-                }
-            };
-            match ev.kind {
-                // mv/rename into the path = Modify(Name), not Create
-                EventKind::Create(_)
-                | EventKind::Modify(ModifyKind::Data(_))
-                | EventKind::Modify(ModifyKind::Name(_)) => {
-                    for p in ev.paths {
-                        if p.is_file() {
-                            let _ = tx.send(Msg::File(p));
+                let ev = match res {
+                    Ok(e) => e,
+                    Err(e) => {
+                        eprintln!("folder error: {e}");
+                        return;
+                    }
+                };
+                match ev.kind {
+                    // mv/rename into the path = Modify(Name), not Create
+                    EventKind::Create(_)
+                    | EventKind::Modify(ModifyKind::Data(_))
+                    | EventKind::Modify(ModifyKind::Name(_)) => {
+                        for p in ev.paths {
+                            if p.is_file() || (include_dirs && p.is_dir()) {
+                                let _ = tx.send(Msg::File(p));
+                            }
                         }
                     }
+                    _ => {}
                 }
-                _ => {}
-            }
-        })
+            })
         .map_err(|e| format!("watcher: {e}"))?;
         watcher
             .watch(&w.path, RecursiveMode::NonRecursive)
@@ -81,6 +82,9 @@ fn run(
     loop {
         match rx.recv_timeout(FLUSH_INTERVAL) {
             Ok(Msg::File(p)) => {
+                if is_protected_dir(&p, &folders) {
+                    continue;
+                }
                 if !pending.lock().unwrap().insert(p.clone()) {
                     continue; // already being processed
                 }
@@ -237,17 +241,31 @@ fn fit_tail(s: &str, w: usize) -> String {
     }
 }
 
-/// Returns true when the file has been unchanged for `cooldown`.
-/// Returns false if the file disappears mid-wait.
+fn is_protected_dir(p: &Path, folders: &[Folder]) -> bool {
+    for f in folders {
+        if p == f.path {
+            return true;
+        }
+        for r in &f.rules {
+            if p == r.to || p.starts_with(&r.to) || r.to.starts_with(p) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Returns true when the file or directory has been unchanged for `cooldown`.
+/// Returns false if it disappears mid-wait.
 fn wait_stable(p: &Path, cooldown: Duration) -> bool {
     if cooldown.is_zero() {
-        return p.is_file();
+        return p.exists();
     }
-    let mut last = file_sig(p);
+    let mut last = entry_sig(p);
     let mut stable = Duration::ZERO;
     while let Some(sig) = last {
         thread::sleep(Duration::from_secs(1));
-        let now = file_sig(p);
+        let now = entry_sig(p);
         match now {
             None => return false,
             Some(s) if s == sig => {
@@ -265,11 +283,8 @@ fn wait_stable(p: &Path, cooldown: Duration) -> bool {
     false
 }
 
-fn file_sig(p: &Path) -> Option<(u64, SystemTime)> {
+fn entry_sig(p: &Path) -> Option<(u64, SystemTime)> {
     let m = fs::metadata(p).ok()?;
-    if !m.is_file() {
-        return None;
-    }
     Some((m.len(), m.modified().unwrap_or(UNIX_EPOCH)))
 }
 
@@ -374,5 +389,33 @@ mod tests {
             .iter()
             .filter(|l| l.starts_with('│'))
             .all(|l| l.matches('│').count() == 4));
+    }
+
+    #[test]
+    fn protected_dirs_are_safely_ignored() {
+        let f1 = Folder {
+            path: PathBuf::from("/home/user/Downloads"),
+            options: crate::config::Options {
+                wait: 1,
+                overwrite: false,
+                include_dirs: true,
+            },
+            ignore_patterns: vec![],
+            rules: vec![crate::config::Rule {
+                match_pattern: "*".into(),
+                name: "test".into(),
+                to: PathBuf::from("/home/user/Downloads/Documents"),
+                mode: crate::config::Mode::Move,
+            }],
+        };
+        let folders = vec![f1];
+        // Watched dir itself protected
+        assert!(is_protected_dir(Path::new("/home/user/Downloads"), &folders));
+        // Rule target dir protected
+        assert!(is_protected_dir(Path::new("/home/user/Downloads/Documents"), &folders));
+        // Child of rule target dir protected
+        assert!(is_protected_dir(Path::new("/home/user/Downloads/Documents/sub"), &folders));
+        // Normal downloaded folder NOT protected
+        assert!(!is_protected_dir(Path::new("/home/user/Downloads/MyFolder"), &folders));
     }
 }

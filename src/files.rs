@@ -7,11 +7,18 @@ use crate::config::Mode;
 pub fn apply(src: &Path, dest_dir: &Path, mode: Mode, dedup: bool) -> io::Result<PathBuf> {
     fs::create_dir_all(dest_dir)?;
     let dst = dedup_path(&dest_dir.join(file_name(src)), dedup);
-    match mode {
-        Mode::Move => move_file(src, &dst)?,
-        Mode::Copy => {
-            fs::copy(src, &dst)?;
-            fs::set_permissions(&dst, fs::metadata(src)?.permissions())?;
+    if src.is_dir() {
+        match mode {
+            Mode::Move => move_dir(src, &dst)?,
+            Mode::Copy => copy_dir(src, &dst)?,
+        }
+    } else {
+        match mode {
+            Mode::Move => move_file(src, &dst)?,
+            Mode::Copy => {
+                fs::copy(src, &dst)?;
+                fs::set_permissions(&dst, fs::metadata(src)?.permissions())?;
+            }
         }
     }
     Ok(dst)
@@ -28,6 +35,34 @@ fn move_file(src: &Path, dst: &Path) -> io::Result<()> {
         }
         Err(e) => Err(e),
     }
+}
+
+fn move_dir(src: &Path, dst: &Path) -> io::Result<()> {
+    match fs::rename(src, dst) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == io::ErrorKind::CrossesDevices => {
+            copy_dir(src, dst)?;
+            fs::remove_dir_all(src)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn copy_dir(src: &Path, dst: &Path) -> io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let target_path = dst.join(entry.file_name());
+        if entry_path.is_dir() {
+            copy_dir(&entry_path, &target_path)?;
+        } else {
+            fs::copy(&entry_path, &target_path)?;
+            fs::set_permissions(&target_path, fs::metadata(&entry_path)?.permissions())?;
+        }
+    }
+    fs::set_permissions(dst, fs::metadata(src)?.permissions())?;
+    Ok(())
 }
 
 fn dedup_path(dst: &Path, dedup: bool) -> PathBuf {
@@ -135,5 +170,19 @@ mod tests {
         let moved = apply(&src, &dst_dir, Mode::Move, true).unwrap();
         // stem-based suffix keeps last extension intact: a.tar.gz -> a.tar_1.gz
         assert_eq!(moved, dst_dir.join("a.tar_1.gz"));
+    }
+
+    #[test]
+    fn move_directory_recursively() {
+        let d = tmpdir("movedir");
+        let src_dir = d.join("my_folder");
+        fs::create_dir_all(src_dir.join("sub")).unwrap();
+        fs::write(src_dir.join("sub/file.txt"), b"hello").unwrap();
+        let dst_dir = d.join("dst");
+
+        let moved = apply(&src_dir, &dst_dir, Mode::Move, true).unwrap();
+        assert_eq!(moved, dst_dir.join("my_folder"));
+        assert!(moved.join("sub/file.txt").is_file());
+        assert!(!src_dir.exists());
     }
 }

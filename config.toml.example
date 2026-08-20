@@ -6,6 +6,7 @@ to = "$HOME/Downloads/organized"
 mode = "move"              # move | copy
 wait = 5                   # wait stable file size (skip active downloads)
 overwrite = false          # false = collision renames to name_1.ext, name_2.ext...
+include_dirs = false       # true = also process and move directories
 
 [ignore]
 match = ["*.part", "*.crdownload", "*.tmp", ".*"]

@@ -28,6 +28,7 @@ pub struct Folder {
 pub struct Options {
     pub wait: u64,
     pub overwrite: bool,
+    pub include_dirs: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +70,8 @@ struct RawOptions {
     wait: Option<u64>,
     #[serde(rename = "overwrite")]
     overwrite: Option<bool>,
+    #[serde(rename = "include_dirs")]
+    include_dirs: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Default)]
@@ -125,6 +128,7 @@ fn resolve(raw: RawConfig) -> Result<Config, String> {
             let eff_mode = f.options.mode.or(g.mode).unwrap_or_default();
             let eff_wait = f.options.wait.or(g.wait).unwrap_or(5);
             let eff_overwrite = f.options.overwrite.or(g.overwrite).unwrap_or(false);
+            let eff_include_dirs = f.options.include_dirs.or(g.include_dirs).unwrap_or(false);
 
             let mut rules: Vec<Rule> = f
                 .rules
@@ -153,6 +157,7 @@ fn resolve(raw: RawConfig) -> Result<Config, String> {
                 options: Options {
                     wait: eff_wait,
                     overwrite: eff_overwrite,
+                    include_dirs: eff_include_dirs,
                 },
                 ignore_patterns,
                 rules,
@@ -351,5 +356,20 @@ mod tests {
     fn empty_folder_rejected() {
         assert!(parse("[folder]").is_err());
         assert!(parse("").is_err());
+    }
+
+    #[test]
+    fn parses_include_dirs_option() {
+        let cfg = parse(
+            r#"
+            [defaults]
+            include_dirs = true
+
+            [[folder]]
+            path = "/x"
+        "#,
+        )
+        .unwrap();
+        assert!(cfg.folders[0].options.include_dirs);
     }
 }
