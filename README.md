@@ -34,7 +34,7 @@ Give it a config.
 harbor ~/.config/harbor/config.toml
 ```
 No config path? Reads `~/.config/harbor/config.toml` by default.
-It runs in the foreground. Use `systemd` to keep it alive in the background.
+It runs in the foreground. To keep it alive in the background, use `systemd` (Linux), `launchd` (Mac), or the **Startup folder** / Task Scheduler (Windows).
 
 ## Configure
 
