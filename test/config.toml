@@ -1,5 +1,5 @@
 # Config de teste do harbor
-# folder: $HOME/code/harbor/test/downloads -> organiza em .../organized/<Categoria>
+# folder: test/downloads -> organiza em .../organized/<Categoria>
 
 [defaults]
 wait = 2
@@ -9,42 +9,42 @@ overwrite = false
 match = ["*.part", "*.crdownload", "*.tmp"]
 
 [[folder]]
-path = "$HOME/code/harbor/test/downloads"
+path = "test/downloads"
 
   [folder.options]
-  to = "$HOME/code/harbor/test/organized"
+  to = "test/organized"
 
   [[folder.rule]]
   name = "Imagens"
   match = "*.{jpg,png,gif,webp,svg,bmp}"
-  to = "$HOME/code/harbor/test/organized/Images"
+  to = "test/organized/Images"
 
   [[folder.rule]]
   name = "Documentos"
   match = "*.{pdf,epub,djvu,txt,md,docx,pptx,xlsx,odt}"
-  to = "$HOME/code/harbor/test/organized/Documents"
+  to = "test/organized/Documents"
 
   [[folder.rule]]
   name = "Arquivos"
   match = "*.{zip,tar.gz,tgz,7z,rar}"
-  to = "$HOME/code/harbor/test/organized/Archives"
+  to = "test/organized/Archives"
 
   [[folder.rule]]
   name = "Musica"
   match = "*.{mp3,flac,wav,ogg,m4a}"
-  to = "$HOME/code/harbor/test/organized/Music"
+  to = "test/organized/Music"
 
   [[folder.rule]]
   name = "Videos"
   match = "*.{mp4,mkv,avi,mov,webm}"
-  to = "$HOME/code/harbor/test/organized/Videos"
+  to = "test/organized/Videos"
 
   [[folder.rule]]
   name = "Apps"
   match = "*.{exe,deb,AppImage,msi,apk}"
-  to = "$HOME/code/harbor/test/organized/Applications"
+  to = "test/organized/Applications"
 
   [[folder.rule]]
   name = "Outros"
   match = "*"
-  to = "$HOME/code/harbor/test/organized/Misc"
+  to = "test/organized/Misc"
