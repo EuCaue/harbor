@@ -37,6 +37,7 @@ pub struct Rule {
     pub name: String,
     pub to: PathBuf,
     pub mode: Mode,
+    pub mime_patterns: Vec<String>,
 }
 
 pub fn load(path: &Path) -> Result<Config, String> {
@@ -93,17 +94,38 @@ struct RawFolder {
     rules: Vec<RawRule>,
 }
 
+#[derive(Deserialize, Debug, Default)]
+#[serde(untagged)]
+enum RawMime {
+    #[default]
+    None,
+    Single(String),
+    Multiple(Vec<String>),
+}
+
+impl RawMime {
+    fn into_vec(self) -> Vec<String> {
+        match self {
+            RawMime::None => vec![],
+            RawMime::Single(s) => vec![s],
+            RawMime::Multiple(v) => v,
+        }
+    }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 struct RawRule {
-    #[serde(rename = "match")]
-    match_pattern: String,
+    #[serde(rename = "match", default)]
+    match_pattern: Option<String>,
     #[serde(rename = "to")]
     to: PathBuf,
     #[serde(default)]
     mode: Option<Mode>,
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    mime: RawMime,
 }
 
 fn resolve(raw: RawConfig) -> Result<Config, String> {
@@ -133,11 +155,18 @@ fn resolve(raw: RawConfig) -> Result<Config, String> {
             let mut rules: Vec<Rule> = f
                 .rules
                 .into_iter()
-                .map(|r| Rule {
-                    match_pattern: r.match_pattern.clone(),
-                    name: r.name.unwrap_or(r.match_pattern),
-                    to: expand(&r.to),
-                    mode: r.mode.unwrap_or(eff_mode),
+                .map(|r| {
+                    let pat = r.match_pattern.unwrap_or_default();
+                    let name = r.name.unwrap_or_else(|| {
+                        if pat.is_empty() { "mime-rule".into() } else { pat.clone() }
+                    });
+                    Rule {
+                        match_pattern: pat,
+                        name,
+                        to: expand(&r.to),
+                        mode: r.mode.unwrap_or(eff_mode),
+                        mime_patterns: r.mime.into_vec(),
+                    }
                 })
                 .collect();
             if rules.is_empty() {
@@ -146,6 +175,7 @@ fn resolve(raw: RawConfig) -> Result<Config, String> {
                     name: "fallback".into(),
                     to: eff_to.clone(),
                     mode: eff_mode,
+                    mime_patterns: vec![],
                 });
             }
 
@@ -371,5 +401,40 @@ mod tests {
         )
         .unwrap();
         assert!(cfg.folders[0].options.include_dirs);
+    }
+
+    #[test]
+    fn parses_mime_rule() {
+        let cfg = parse(
+            r#"
+            [[folder]]
+            path = "/dl"
+
+              [[folder.rule]]
+              mime = "image/*"
+              to = "/pics"
+
+              [[folder.rule]]
+              match = "*.pdf"
+              mime = ["text/*", "application/pdf"]
+              to = "/docs"
+
+              [[folder.rule]]
+              match = "*"
+              to = "/misc"
+        "#,
+        )
+        .unwrap();
+        let rules = &cfg.folders[0].rules;
+
+        assert_eq!(rules[0].match_pattern, "");
+        assert_eq!(rules[0].mime_patterns, vec!["image/*"]);
+        assert_eq!(rules[0].name, "mime-rule");
+
+        assert_eq!(rules[1].match_pattern, "*.pdf");
+        assert_eq!(rules[1].mime_patterns, vec!["text/*", "application/pdf"]);
+        assert_eq!(rules[1].name, "*.pdf");
+
+        assert!(rules[2].mime_patterns.is_empty());
     }
 }

@@ -6,16 +6,18 @@ Written in Rust.
 ## Commands
 
 - `cargo run` — build + run daemon (foreground)
+- `cargo run -- mime <file>...` — inspect MIME type of files
 - `cargo build --release` — release binary
 - `cargo test` — run tests
 - `cargo clippy` — lint before committing
 
 ## Layout
 
-- `src/main.rs` — CLI entry, daemon bootstrap
+- `src/main.rs` — CLI entry, daemon bootstrap, `mime` sub-command
 - `src/config.rs` — TOML config parse (serde)
-- `src/rules.rs` — pattern matching + dest resolution
-- `src/daemon.rs` — watch loop, queue, cooldown
+- `src/rules.rs` — pattern + MIME matching + dest resolution
+- `src/mime.rs` — magic bytes + extension MIME detection
+- `src/daemon.rs` — watch loop, queue, cooldown, startup sweep
 - `src/files.rs` — move/copy/dedup operations
 
 ## Architecture rules

@@ -155,7 +155,7 @@ fn process_file(p: PathBuf, folder: Folder, wr: FolderRules, tx: mpsc::Sender<Ms
         return; // file vanished or never stabilised
     }
 
-    let Some(rule) = wr.find(&name) else {
+    let Some(rule) = wr.find(&name, &p) else {
         return;
     };
 
@@ -444,6 +444,7 @@ mod tests {
                 name: "test".into(),
                 to: PathBuf::from("/home/user/Downloads/Documents"),
                 mode: crate::config::Mode::Move,
+                mime_patterns: vec![],
             }],
         };
         let folders = vec![f1];

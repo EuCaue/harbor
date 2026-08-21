@@ -30,7 +30,17 @@ path = "$HOME/Downloads"
   to = "$HOME/Pictures"
 
   [[folder.rule]]
+  name = "Images (MIME fallback)"
+  mime = "image/*"         # matches any image type via magic bytes
+  to = "$HOME/Pictures"
+
+  [[folder.rule]]
   match = "*.{pdf,epub,djvu}"
+  to = "$HOME/Documents"
+
+  [[folder.rule]]
+  name = "Documents (MIME)"
+  mime = ["application/pdf", "text/*"]
   to = "$HOME/Documents"
 
   [[folder.rule]]

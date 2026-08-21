@@ -36,23 +36,42 @@ harbor ~/.config/harbor/config.toml
 No config path? Reads `~/.config/harbor/config.toml` by default.
 It runs in the foreground. To keep it alive in the background, use `systemd` (Linux), `launchd` (Mac), or the **Startup folder** / Task Scheduler (Windows).
 
+### Inspect MIME Types
+
+Inspect file MIME types directly from CLI:
+```sh
+harbor mime photo.png document.pdf archive.zip
+```
+
 ## Configure
 
 See [`config.toml.example`](config.toml.example) for a full setup.
 
-Rules match top to bottom. First match wins.
+Rules match top to bottom. First match wins. Within a single rule, `match` (glob) is evaluated first before `mime`.
 
 ```toml
 [defaults]
 to = "$HOME/Downloads/organized"
 wait = 5
+include_dirs = false
 
 [[folder]]
 path = "$HOME/Downloads"
 
   [[folder.rule]]
+  name = "Photos"
   match = "*.{jpg,png}"
   to = "$HOME/Pictures"
+
+  [[folder.rule]]
+  name = "Images Fallback"
+  mime = "image/*"
+  to = "$HOME/Pictures"
+
+  [[folder.rule]]
+  name = "Documents"
+  mime = ["application/pdf", "text/*"]
+  to = "$HOME/Documents"
 
   [[folder.rule]]
   match = "*"
@@ -61,8 +80,11 @@ path = "$HOME/Downloads"
 
 ## Core Behavior
 
+* **Rule Precedence:** Evaluated top-to-bottom. Within a rule, `match` (extension glob) is checked first, then `mime` (magic bytes / MIME type).
+* **Startup Sweep:** On startup, Harbor scans existing files and folders, organizes non-conforming items, then starts watching.
 * **Cooldown:** Waits for file size to stop changing. No moving half-downloaded files.
 * **Dedup:** Conflict? Harbor renames to `name_1.ext`. Or set `overwrite = true` to overwrite.
+* **Directories:** Set `include_dirs = true` to also organize folders.
 * **Cross-device:** Uses atomic `rename`. Falls back to copy+delete across partitions.
 * **Ignore:** Skips `*.part` or `*.tmp` out of the box.
 

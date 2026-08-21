@@ -8,3 +8,6 @@ globset = "0.4.20"
 notify = "8.2.0"
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.4"
+
+[dev-dependencies]
+tempfile = "3.27.0"
