@@ -57,11 +57,29 @@ pub fn start(folders: Vec<Folder>) -> Result<(), String> {
             .map_err(|e| format!("folder {}: {}", w.path.display(), e))?;
         watchers.push(watcher);
     }
+
+    scan_existing(&folders, &tx);
+
     let tx_run = tx.clone();
     drop(tx);
 
     thread::spawn(move || run(rx, folders, watchers, tx_run));
     Ok(())
+}
+
+fn scan_existing(folders: &[Folder], tx: &mpsc::Sender<Msg>) {
+    for w in folders {
+        let include_dirs = w.options.include_dirs;
+        let Ok(entries) = fs::read_dir(&w.path) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() || (include_dirs && p.is_dir()) {
+                let _ = tx.send(Msg::File(p));
+            }
+        }
+    }
 }
 
 const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
@@ -165,11 +183,31 @@ fn flush(rows: &mut Vec<Row>) {
         .map(|r| r.rule.as_str())
         .collect::<HashSet<_>>()
         .len();
-    println!(
-        "harbor: {n} file(s) organized in {cats} categories\n{}\n",
-        render_table(rows)
-    );
+    let table = render_table(rows);
+    let output = format!("harbor: {n} file(s) organized in {cats} categories\n{table}\n");
+    println!("{output}");
+    append_log_file(&output);
     rows.clear();
+}
+
+fn append_log_file(msg: &str) {
+    let log_path = if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
+        PathBuf::from(data_home).join("harbor/harbor.log")
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".local/share/harbor/harbor.log")
+    } else if let Ok(profile) = std::env::var("USERPROFILE") {
+        PathBuf::from(profile).join("AppData/Local/harbor/harbor.log")
+    } else {
+        return;
+    };
+
+    if let Some(parent) = log_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(log_path) {
+        use std::io::Write;
+        let _ = writeln!(f, "{msg}");
+    }
 }
 
 /// Real data table: auto-width columns, header, rows grouped by rule.
@@ -417,5 +455,18 @@ mod tests {
         assert!(is_protected_dir(Path::new("/home/user/Downloads/Documents/sub"), &folders));
         // Normal downloaded folder NOT protected
         assert!(!is_protected_dir(Path::new("/home/user/Downloads/MyFolder"), &folders));
+    }
+
+    #[test]
+    fn existing_files_are_moved_on_startup() {
+        let src = tmpdir("startup_src");
+        let dst = tmpdir("startup_dst");
+        fs::write(src.join("existing.txt"), b"hello").unwrap();
+
+        start_with(&src, &dst);
+
+        let moved = wait_for(&dst.join("existing.txt"), 10);
+        assert!(moved, "existing file was not moved on startup");
+        assert!(!src.join("existing.txt").exists());
     }
 }
