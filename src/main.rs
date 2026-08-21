@@ -8,19 +8,32 @@ use std::path::PathBuf;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() >= 2 && args[1] == "mime" {
-        if args.len() < 3 {
-            eprintln!("usage: harbor mime <file>...");
-            std::process::exit(1);
-        }
-        for file in &args[2..] {
-            let p = std::path::Path::new(file);
-            match mime::detect(p) {
-                Some(m) => println!("{file}: {m}"),
-                None => println!("{file}: unknown"),
+    if args.len() >= 2 {
+        match args[1].as_str() {
+            "-h" | "--help" | "help" => {
+                print_help();
+                return;
             }
+            "-v" | "--version" | "version" => {
+                println!("harbor {}", env!("CARGO_PKG_VERSION"));
+                return;
+            }
+            "mime" => {
+                if args.len() < 3 {
+                    eprintln!("usage: harbor mime <file>...");
+                    std::process::exit(1);
+                }
+                for file in &args[2..] {
+                    let p = std::path::Path::new(file);
+                    match mime::detect(p) {
+                        Some(m) => println!("{file}: {m}"),
+                        None => println!("{file}: unknown"),
+                    }
+                }
+                return;
+            }
+            _ => {}
         }
-        return;
     }
 
     let (path, is_default) = config_path();
@@ -64,4 +77,19 @@ fn config_path() -> (PathBuf, bool) {
             (p, true)
         }
     }
+}
+
+fn print_help() {
+    println!(
+        "harbor {} - zero-async file organizer daemon\n\n\
+        USAGE:\n    \
+            harbor [OPTIONS] [CONFIG_PATH]\n    \
+            harbor mime <FILE>...\n\n\
+        COMMANDS:\n    \
+            mime <FILE>...    Inspect detected MIME type of files\n\n\
+        OPTIONS:\n    \
+            -h, --help        Print help information\n    \
+            -v, --version     Print version information",
+        env!("CARGO_PKG_VERSION")
+    );
 }
