@@ -29,11 +29,16 @@ sudo cp target/release/harbor /usr/local/bin/
 
 ## Run
 
-Give it a config.
+Start Harbor with default config (`~/.config/harbor/config.toml`):
 ```sh
-harbor ~/.config/harbor/config.toml
+harbor
 ```
-No config path? Reads `~/.config/harbor/config.toml` by default.
+
+Or pass a custom config path:
+```sh
+harbor -c /path/to/custom-config.toml
+```
+No config file yet? Harbor automatically creates an initial template at `~/.config/harbor/config.toml` on first run.
 It runs in the foreground. To keep it alive in the background, use `systemd` (Linux), `launchd` (Mac), or the **Startup folder** / Task Scheduler (Windows).
 
 ### Inspect MIME Types

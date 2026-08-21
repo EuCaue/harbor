@@ -49,7 +49,7 @@ Written in Rust.
 - Mark deliberate shortcuts with a `// ponytail:` comment naming the ceiling.
 - One runnable check (assert-based `#[test]` or small test fn) for any
   non-trivial logic: config parse, rule matching, dedup naming.
-- CLI stays dumb: `harbor <config-path>` with plain args, no clap unless
+- CLI stays dumb: `harbor [-c <config-path>]` with plain args, no clap unless
   multi-command need appears.
 
 ## Install layout (deploy-time, not code)
