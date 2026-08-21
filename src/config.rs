@@ -40,6 +40,65 @@ pub struct Rule {
     pub mime_patterns: Vec<String>,
 }
 
+pub const DEFAULT_CONFIG_TEMPLATE: &str = r#"# Harbor configuration file
+# Edit this file to customize your watch folders and organization rules.
+
+[defaults]
+to = "$HOME/Downloads/organized"
+mode = "move"              # move | copy
+wait = 5                   # wait stable file size in seconds (skips active downloads)
+overwrite = false          # false = collision renames to name_1.ext, name_2.ext...
+include_dirs = false       # true = also process and move directories
+
+[ignore]
+match = ["*.part", "*.crdownload", "*.tmp", ".*"]
+
+# ------------------------------------------------------------
+# Watched folders
+# ------------------------------------------------------------
+
+[[folder]]
+path = "$HOME/Downloads"
+
+  # Uncomment the rules below to enable automatic organization:
+
+  # [[folder.rule]]
+  # name = "Documents"
+  # match = "*.{pdf,doc,docx,txt,rtf,xls,xlsx,ppt,pptx,epub,md,csv,xml,json,odt}"
+  # mime = ["application/pdf", "text/*"]
+  # to = "$HOME/Documents"
+
+  # [[folder.rule]]
+  # name = "Pictures"
+  # match = "*.{jpg,jpeg,png,gif,webp,svg,ico,bmp,tiff}"
+  # mime = "image/*"
+  # to = "$HOME/Pictures"
+
+  # [[folder.rule]]
+  # name = "Compressed"
+  # match = "*.{zip,rar,7z,tar,gz,tgz,bz2,xz,iso,img}"
+  # mime = ["application/zip", "application/x-7z-compressed", "application/x-tar", "application/x-gzip", "application/x-iso9660-image"]
+  # to = "$HOME/Downloads/Compressed"
+
+  # [[folder.rule]]
+  # name = "Music"
+  # match = "*.{mp3,wav,aac,flac,ogg,m4a,m3u}"
+  # mime = "audio/*"
+  # to = "$HOME/Music"
+
+  # [[folder.rule]]
+  # name = "Videos"
+  # match = "*.{mp4,mkv,avi,flv,mov,wmv,webm,ts}"
+  # mime = "video/*"
+  # to = "$HOME/Videos"
+
+  # [[folder.rule]]
+  # name = "Programs"
+  # match = "*.{exe,msi,dmg,sh,deb,rpm,AppImage,apk,apkm}"
+  # mime = ["application/vnd.android.package-archive", "application/x-rpm", "application/x-debian-package", "application/x-executable", "application/x-msdownload"]
+  # to = "$HOME/Downloads/Programs"
+"#;
+
 pub fn load(path: &Path) -> Result<Config, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("read {}: {}", path.display(), e))?;
     parse(&text)
@@ -436,5 +495,13 @@ mod tests {
         assert_eq!(rules[1].name, "*.pdf");
 
         assert!(rules[2].mime_patterns.is_empty());
+    }
+
+    #[test]
+    fn parses_default_template() {
+        let cfg = parse(DEFAULT_CONFIG_TEMPLATE).unwrap();
+        assert_eq!(cfg.folders.len(), 1);
+        assert_eq!(cfg.folders[0].options.wait, 5);
+        assert!(!cfg.folders[0].options.include_dirs);
     }
 }

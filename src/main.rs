@@ -23,7 +23,18 @@ fn main() {
         return;
     }
 
-    let path = config_path();
+    let (path, is_default) = config_path();
+    if is_default && !path.exists() {
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if std::fs::write(&path, config::DEFAULT_CONFIG_TEMPLATE).is_ok() {
+            println!("harbor: created initial config at {}", path.display());
+            println!("harbor: edit your rules and run harbor again to start.");
+            return;
+        }
+    }
+
     let cfg = config::load(&path).unwrap_or_else(|e| {
         eprintln!("harbor: {e}");
         std::process::exit(1);
@@ -37,11 +48,20 @@ fn main() {
     std::thread::park();
 }
 
-fn config_path() -> PathBuf {
+fn config_path() -> (PathBuf, bool) {
     match std::env::args().nth(1) {
-        Some(p) => PathBuf::from(p),
-        None => std::env::var("HOME")
-            .map(|h| PathBuf::from(h).join(".config/harbor/config.toml"))
-            .unwrap_or_else(|_| PathBuf::from("config.toml")),
+        Some(p) => (PathBuf::from(p), false),
+        None => {
+            let p = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+                PathBuf::from(xdg).join("harbor/config.toml")
+            } else if let Ok(home) = std::env::var("HOME") {
+                PathBuf::from(home).join(".config/harbor/config.toml")
+            } else if let Ok(profile) = std::env::var("USERPROFILE") {
+                PathBuf::from(profile).join(".config/harbor/config.toml")
+            } else {
+                PathBuf::from("config.toml")
+            };
+            (p, true)
+        }
     }
 }
