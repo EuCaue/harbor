@@ -104,6 +104,23 @@ pub fn load(path: &Path) -> Result<Config, String> {
     parse(&text)
 }
 
+pub fn check(path: &Path) -> Result<(), String> {
+    let cfg = load(path)?;
+    println!("harbor check: {}", path.display());
+    println!("✓ TOML syntax and schema valid");
+    for (i, folder) in cfg.folders.iter().enumerate() {
+        let status = if folder.path.exists() {
+            "accessible"
+        } else {
+            "path not found on disk"
+        };
+        println!("✓ folder #{}: {} ({status})", i + 1, folder.path.display());
+        println!("  • {} rule(s) configured", folder.rules.len());
+    }
+    println!("harbor: configuration is valid");
+    Ok(())
+}
+
 pub fn parse(text: &str) -> Result<Config, String> {
     let raw: RawConfig = toml::from_str(text).map_err(|e| format!("toml: {}", e))?;
     resolve(raw)
@@ -503,5 +520,17 @@ mod tests {
         assert_eq!(cfg.folders.len(), 1);
         assert_eq!(cfg.folders[0].options.wait, 5);
         assert!(!cfg.folders[0].options.include_dirs);
+    }
+
+    #[test]
+    fn check_validates_config_file() {
+        let dir = std::env::temp_dir().join(format!("harbor_check_test_{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let cfg_path = dir.join("test_cfg.toml");
+        fs::write(&cfg_path, DEFAULT_CONFIG_TEMPLATE).unwrap();
+
+        let res = check(&cfg_path);
+        assert!(res.is_ok());
+        let _ = fs::remove_dir_all(dir);
     }
 }

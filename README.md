@@ -41,11 +41,22 @@ harbor -c /path/to/custom-config.toml
 No config file yet? Harbor automatically creates an initial template at `~/.config/harbor/config.toml` on first run.
 It runs in the foreground. To keep it alive in the background, use `systemd` (Linux), `launchd` (Mac), or the **Startup folder** / Task Scheduler (Windows).
 
-### Inspect MIME Types
+### CLI Commands & Flags
 
-Inspect file MIME types directly from CLI:
 ```sh
+# Validate configuration file and folder paths
+harbor check
+
+# Simulate moves without touching files (dry-run)
+harbor --dry-run
+harbor -n -c /path/to/custom.toml
+
+# Inspect file MIME types
 harbor mime photo.png document.pdf archive.zip
+
+# Print help or version
+harbor --help
+harbor --version
 ```
 
 ## Configure

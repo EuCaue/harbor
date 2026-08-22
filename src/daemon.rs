@@ -82,6 +82,57 @@ fn scan_existing(folders: &[Folder], tx: &mpsc::Sender<Msg>) {
     }
 }
 
+pub fn dry_run(folders: &[Folder]) -> usize {
+    let compiled: Vec<FolderRules> = folders.iter().map(FolderRules::build).collect();
+    let mut rows: Vec<Row> = Vec::new();
+
+    for (idx, folder) in folders.iter().enumerate() {
+        let Ok(entries) = fs::read_dir(&folder.path) else {
+            continue;
+        };
+        let include_dirs = folder.options.include_dirs;
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if !p.is_file() && (!include_dirs || !p.is_dir()) {
+                continue;
+            }
+            if is_protected_dir(&p, folders) {
+                continue;
+            }
+            let Some(name) = p.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if compiled[idx].ignored(name) {
+                continue;
+            }
+            if let Some(rule) = compiled[idx].find(name, &p) {
+                let simulated_dest = rule.to().join(name);
+                rows.push(Row {
+                    rule: rule.name().to_string(),
+                    file: name.to_string(),
+                    dest: simulated_dest.to_string_lossy().to_string(),
+                });
+            }
+        }
+    }
+
+    if rows.is_empty() {
+        println!("harbor [dry-run]: 0 files match rules");
+        return 0;
+    }
+
+    rows.sort_by(|a, b| a.rule.cmp(&b.rule).then(a.file.cmp(&b.file)));
+    let n = rows.len();
+    let cats = rows
+        .iter()
+        .map(|r| r.rule.as_str())
+        .collect::<HashSet<_>>()
+        .len();
+    let table = render_table(&rows);
+    println!("harbor [dry-run]: {n} file(s) would be organized in {cats} categories\n{table}\n");
+    n
+}
+
 const FLUSH_INTERVAL: Duration = Duration::from_secs(5);
 const FLUSH_BATCH: usize = 50;
 
@@ -469,5 +520,31 @@ mod tests {
         let moved = wait_for(&dst.join("existing.txt"), 10);
         assert!(moved, "existing file was not moved on startup");
         assert!(!src.join("existing.txt").exists());
+    }
+
+    #[test]
+    fn dry_run_does_not_modify_files() {
+        let src = tmpdir("dryrun_src");
+        let dst = tmpdir("dryrun_dst");
+        fs::write(src.join("sample.txt"), b"data").unwrap();
+
+        let cfg = parse(&format!(
+            r#"
+            [[folder]]
+            path = "{}"
+
+              [folder.options]
+              to = "{}"
+              wait = 0
+        "#,
+            src.display(),
+            dst.display()
+        ))
+        .unwrap();
+
+        let count = dry_run(&cfg.folders);
+        assert_eq!(count, 1);
+        assert!(src.join("sample.txt").exists(), "source file must remain untouched in dry-run");
+        assert!(!dst.join("sample.txt").exists(), "destination file must not be created in dry-run");
     }
 }
