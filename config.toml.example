@@ -25,14 +25,20 @@ path = "$HOME/Downloads"
   match = ["*.srt"]
 
   [[folder.rule]]
-  name = "Photos"          # optional log label
+  name = "Photos by Date"  # optional log label
   match = "*.{jpg,png,gif,webp}"
-  to = "$HOME/Pictures"
+  to = "$HOME/Pictures/{year}/{month}"
 
   [[folder.rule]]
   name = "Images (MIME fallback)"
   mime = "image/*"         # matches any image type via magic bytes
-  to = "$HOME/Pictures"
+  to = "$HOME/Pictures/{year}/{month}"
+
+  [[folder.rule]]
+  name = "Large Archives"
+  match = "*.{zip,tar.gz,7z,iso}"
+  min_size = "500MB"       # matches files >= 500MB
+  to = "$HOME/Archives/Large"
 
   [[folder.rule]]
   match = "*.{pdf,epub,djvu}"

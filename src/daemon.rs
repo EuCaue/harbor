@@ -106,7 +106,7 @@ pub fn dry_run(folders: &[Folder]) -> usize {
                 continue;
             }
             if let Some(rule) = compiled[idx].find(name, &p) {
-                let simulated_dest = rule.to().join(name);
+                let simulated_dest = rule.resolve_dest(&p).join(name);
                 rows.push(Row {
                     rule: rule.name().to_string(),
                     file: name.to_string(),
@@ -210,7 +210,8 @@ fn process_file(p: PathBuf, folder: Folder, wr: FolderRules, tx: mpsc::Sender<Ms
         return;
     };
 
-    match files::apply(&p, rule.to(), rule.mode(), !folder.options.overwrite) {
+    let dest = rule.resolve_dest(&p);
+    match files::apply(&p, &dest, rule.mode(), !folder.options.overwrite) {
         Ok(dst) => {
             let row = Row {
                 rule: rule.name().to_string(),
@@ -496,6 +497,8 @@ mod tests {
                 to: PathBuf::from("/home/user/Downloads/Documents"),
                 mode: crate::config::Mode::Move,
                 mime_patterns: vec![],
+                min_size: None,
+                max_size: None,
             }],
         };
         let folders = vec![f1];

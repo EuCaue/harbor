@@ -75,14 +75,20 @@ include_dirs = false
 path = "$HOME/Downloads"
 
   [[folder.rule]]
-  name = "Photos"
+  name = "Photos by Date"
   match = "*.{jpg,png}"
-  to = "$HOME/Pictures"
+  to = "$HOME/Pictures/{year}/{month}"
+
+  [[folder.rule]]
+  name = "Large Archives"
+  match = "*.{zip,tar.gz,iso}"
+  min_size = "500MB"
+  to = "$HOME/Archives/Large"
 
   [[folder.rule]]
   name = "Images Fallback"
   mime = "image/*"
-  to = "$HOME/Pictures"
+  to = "$HOME/Pictures/{year}/{month}"
 
   [[folder.rule]]
   name = "Documents"
@@ -96,7 +102,9 @@ path = "$HOME/Downloads"
 
 ## Core Behavior
 
-* **Rule Precedence:** Evaluated top-to-bottom. Within a rule, `match` (extension glob) is checked first, then `mime` (magic bytes / MIME type).
+* **Rule Precedence:** Evaluated top-to-bottom. Within a rule: size filter -> `match` (extension glob) -> `mime` (magic bytes / MIME type).
+* **Date Variables:** Destination `to` paths support `{year}`, `{month}`, `{day}`, and `{date}` (expanded based on file modification date).
+* **Size Filters:** Rules accept `min_size` and `max_size` (e.g. `500MB`, `10KB`, `1GB`).
 * **Startup Sweep:** On startup, Harbor scans existing files and folders, organizes non-conforming items, then starts watching.
 * **Cooldown:** Waits for file size to stop changing. No moving half-downloaded files.
 * **Dedup:** Conflict? Harbor renames to `name_1.ext`. Or set `overwrite = true` to overwrite.

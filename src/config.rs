@@ -38,6 +38,8 @@ pub struct Rule {
     pub to: PathBuf,
     pub mode: Mode,
     pub mime_patterns: Vec<String>,
+    pub min_size: Option<u64>,
+    pub max_size: Option<u64>,
 }
 
 pub const DEFAULT_CONFIG_TEMPLATE: &str = r#"# Harbor configuration file
@@ -189,6 +191,47 @@ impl RawMime {
     }
 }
 
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum RawSize {
+    Number(u64),
+    String(String),
+}
+
+impl RawSize {
+    pub fn to_bytes(&self) -> Result<u64, String> {
+        match self {
+            RawSize::Number(n) => Ok(*n),
+            RawSize::String(s) => parse_size_str(s),
+        }
+    }
+}
+
+pub fn parse_size_str(s: &str) -> Result<u64, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("empty size".into());
+    }
+    let lower = s.to_lowercase();
+    let (num_part, multiplier) = if lower.ends_with("gb") || lower.ends_with('g') {
+        let n = if lower.ends_with("gb") { &s[..s.len() - 2] } else { &s[..s.len() - 1] };
+        (n, 1024 * 1024 * 1024)
+    } else if lower.ends_with("mb") || lower.ends_with('m') {
+        let n = if lower.ends_with("mb") { &s[..s.len() - 2] } else { &s[..s.len() - 1] };
+        (n, 1024 * 1024)
+    } else if lower.ends_with("kb") || lower.ends_with('k') {
+        let n = if lower.ends_with("kb") { &s[..s.len() - 2] } else { &s[..s.len() - 1] };
+        (n, 1024)
+    } else if lower.ends_with('b') {
+        (&s[..s.len() - 1], 1)
+    } else {
+        (s, 1)
+    };
+
+    let val: u64 = num_part.trim().parse().map_err(|e| format!("invalid size '{s}': {e}"))?;
+    Ok(val * multiplier)
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 struct RawRule {
@@ -202,6 +245,10 @@ struct RawRule {
     name: Option<String>,
     #[serde(default)]
     mime: RawMime,
+    #[serde(default)]
+    min_size: Option<RawSize>,
+    #[serde(default)]
+    max_size: Option<RawSize>,
 }
 
 fn resolve(raw: RawConfig) -> Result<Config, String> {
@@ -212,64 +259,70 @@ fn resolve(raw: RawConfig) -> Result<Config, String> {
     let g = raw.defaults;
     let g_ignore = raw.ignore.matches;
 
-    let folders = raw
-        .folders
-        .into_iter()
-        .map(|f| {
-            let f_path = expand(&f.path);
-            let eff_to = expand(
-                &f.options
-                    .to
-                    .or_else(|| g.to.clone())
-                    .unwrap_or_else(|| f_path.join("organized")),
-            );
-            let eff_mode = f.options.mode.or(g.mode).unwrap_or_default();
-            let eff_wait = f.options.wait.or(g.wait).unwrap_or(5);
-            let eff_overwrite = f.options.overwrite.or(g.overwrite).unwrap_or(false);
-            let eff_include_dirs = f.options.include_dirs.or(g.include_dirs).unwrap_or(false);
+    let mut folders = Vec::new();
+    for f in raw.folders {
+        let f_path = expand(&f.path);
+        let eff_to = expand(
+            &f.options
+                .to
+                .or_else(|| g.to.clone())
+                .unwrap_or_else(|| f_path.join("organized")),
+        );
+        let eff_mode = f.options.mode.or(g.mode).unwrap_or_default();
+        let eff_wait = f.options.wait.or(g.wait).unwrap_or(5);
+        let eff_overwrite = f.options.overwrite.or(g.overwrite).unwrap_or(false);
+        let eff_include_dirs = f.options.include_dirs.or(g.include_dirs).unwrap_or(false);
 
-            let mut rules: Vec<Rule> = f
-                .rules
-                .into_iter()
-                .map(|r| {
-                    let pat = r.match_pattern.unwrap_or_default();
-                    let name = r.name.unwrap_or_else(|| {
-                        if pat.is_empty() { "mime-rule".into() } else { pat.clone() }
-                    });
-                    Rule {
-                        match_pattern: pat,
-                        name,
-                        to: expand(&r.to),
-                        mode: r.mode.unwrap_or(eff_mode),
-                        mime_patterns: r.mime.into_vec(),
-                    }
-                })
-                .collect();
-            if rules.is_empty() {
-                rules.push(Rule {
-                    match_pattern: "*".into(),
-                    name: "fallback".into(),
-                    to: eff_to.clone(),
-                    mode: eff_mode,
-                    mime_patterns: vec![],
-                });
-            }
+        let mut rules = Vec::new();
+        for r in f.rules {
+            let pat = r.match_pattern.unwrap_or_default();
+            let name = r.name.unwrap_or_else(|| {
+                if pat.is_empty() { "mime-rule".into() } else { pat.clone() }
+            });
+            let min_size = match r.min_size {
+                Some(ref s) => Some(s.to_bytes()?),
+                None => None,
+            };
+            let max_size = match r.max_size {
+                Some(ref s) => Some(s.to_bytes()?),
+                None => None,
+            };
+            rules.push(Rule {
+                match_pattern: pat,
+                name,
+                to: expand(&r.to),
+                mode: r.mode.unwrap_or(eff_mode),
+                mime_patterns: r.mime.into_vec(),
+                min_size,
+                max_size,
+            });
+        }
+        if rules.is_empty() {
+            rules.push(Rule {
+                match_pattern: "*".into(),
+                name: "fallback".into(),
+                to: eff_to.clone(),
+                mode: eff_mode,
+                mime_patterns: vec![],
+                min_size: None,
+                max_size: None,
+            });
+        }
 
-            let mut ignore_patterns = g_ignore.clone();
-            ignore_patterns.extend(f.ignore.matches);
+        let mut ignore_patterns = g_ignore.clone();
+        ignore_patterns.extend(f.ignore.matches);
 
-            Folder {
-                path: f_path,
-                options: Options {
-                    wait: eff_wait,
-                    overwrite: eff_overwrite,
-                    include_dirs: eff_include_dirs,
-                },
-                ignore_patterns,
-                rules,
-            }
-        })
-        .collect();
+        folders.push(Folder {
+            path: f_path,
+            options: Options {
+                wait: eff_wait,
+                overwrite: eff_overwrite,
+                include_dirs: eff_include_dirs,
+            },
+            ignore_patterns,
+            rules,
+        });
+    }
 
     Ok(Config { folders })
 }
@@ -532,5 +585,34 @@ mod tests {
         let res = check(&cfg_path);
         assert!(res.is_ok());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn parses_size_filters() {
+        let cfg = parse(
+            r#"
+            [[folder]]
+            path = "/dl"
+
+              [[folder.rule]]
+              name = "Big"
+              match = "*"
+              min_size = "500MB"
+              to = "/big"
+
+              [[folder.rule]]
+              name = "Small"
+              match = "*.txt"
+              max_size = "50KB"
+              to = "/small"
+        "#,
+        )
+        .unwrap();
+
+        let rules = &cfg.folders[0].rules;
+        assert_eq!(rules[0].min_size, Some(500 * 1024 * 1024));
+        assert_eq!(rules[0].max_size, None);
+        assert_eq!(rules[1].min_size, None);
+        assert_eq!(rules[1].max_size, Some(50 * 1024));
     }
 }
