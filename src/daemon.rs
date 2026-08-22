@@ -242,14 +242,55 @@ fn flush(rows: &mut Vec<Row>) {
     rows.clear();
 }
 
-fn append_log_file(msg: &str) {
-    let log_path = if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
-        PathBuf::from(data_home).join("harbor/harbor.log")
+pub fn default_log_path() -> Option<PathBuf> {
+    if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
+        Some(PathBuf::from(data_home).join("harbor/harbor.log"))
     } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".local/share/harbor/harbor.log")
+        Some(PathBuf::from(home).join(".local/share/harbor/harbor.log"))
     } else if let Ok(profile) = std::env::var("USERPROFILE") {
-        PathBuf::from(profile).join("AppData/Local/harbor/harbor.log")
+        Some(PathBuf::from(profile).join("AppData/Local/harbor/harbor.log"))
     } else {
+        None
+    }
+}
+
+pub fn show_log(lines: usize, clear: bool) -> Result<(), String> {
+    let Some(log_path) = default_log_path() else {
+        return Err("unable to determine log path for current user".into());
+    };
+
+    if clear {
+        if log_path.exists() {
+            fs::write(&log_path, "").map_err(|e| format!("failed to clear log: {e}"))?;
+            println!("harbor: log history cleared ({})", log_path.display());
+        } else {
+            println!("harbor: no log file to clear");
+        }
+        return Ok(());
+    }
+
+    if !log_path.exists() {
+        println!("harbor: no log history found ({})", log_path.display());
+        return Ok(());
+    }
+
+    let text = fs::read_to_string(&log_path).map_err(|e| format!("failed to read log: {e}"))?;
+    let all_lines: Vec<&str> = text.lines().collect();
+    if all_lines.is_empty() {
+        println!("harbor: log file is empty ({})", log_path.display());
+        return Ok(());
+    }
+
+    let start = all_lines.len().saturating_sub(lines);
+    for line in &all_lines[start..] {
+        println!("{line}");
+    }
+
+    Ok(())
+}
+
+fn append_log_file(msg: &str) {
+    let Some(log_path) = default_log_path() else {
         return;
     };
 
@@ -549,5 +590,11 @@ mod tests {
         assert_eq!(count, 1);
         assert!(src.join("sample.txt").exists(), "source file must remain untouched in dry-run");
         assert!(!dst.join("sample.txt").exists(), "destination file must not be created in dry-run");
+    }
+
+    #[test]
+    fn show_log_handles_empty_or_cleared() {
+        let res = show_log(10, false);
+        assert!(res.is_ok());
     }
 }

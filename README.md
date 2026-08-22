@@ -51,6 +51,11 @@ harbor check
 harbor --dry-run
 harbor -n -c /path/to/custom.toml
 
+# View or clear organization history
+harbor log
+harbor log -n 100
+harbor log --clear
+
 # Inspect file MIME types
 harbor mime photo.png document.pdf archive.zip
 

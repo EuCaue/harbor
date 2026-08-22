@@ -11,6 +11,7 @@ enum Command {
     DryRun { config: PathBuf },
     Check { config: PathBuf },
     Mime { files: Vec<PathBuf> },
+    Log { lines: usize, clear: bool },
 }
 
 fn main() {
@@ -27,6 +28,12 @@ fn main() {
                 std::process::exit(1);
             });
             daemon::dry_run(&cfg.folders);
+        }
+        Command::Log { lines, clear } => {
+            if let Err(e) = daemon::show_log(lines, clear) {
+                eprintln!("harbor: {e}");
+                std::process::exit(1);
+            }
         }
         Command::Mime { files } => {
             for file in files {
@@ -83,6 +90,30 @@ fn parse_args() -> Command {
             }
             "check" => {
                 is_check = true;
+            }
+            "log" => {
+                let mut lines = 40;
+                let mut clear = false;
+                i += 1;
+                while i < args.len() {
+                    let log_arg = &args[i];
+                    if log_arg == "-c" || log_arg == "--clear" {
+                        clear = true;
+                    } else if log_arg == "-n" || log_arg == "--lines" {
+                        i += 1;
+                        if i >= args.len() {
+                            eprintln!("error: flag '{log_arg}' requires a number argument");
+                            std::process::exit(1);
+                        }
+                        lines = args[i].parse().unwrap_or(40);
+                    } else if let Some(n_str) = log_arg.strip_prefix("-n=") {
+                        lines = n_str.parse().unwrap_or(40);
+                    } else if let Some(n_str) = log_arg.strip_prefix("--lines=") {
+                        lines = n_str.parse().unwrap_or(40);
+                    }
+                    i += 1;
+                }
+                return Command::Log { lines, clear };
             }
             "-n" | "--dry-run" => {
                 is_dry_run = true;
@@ -152,15 +183,20 @@ fn print_help() {
         USAGE:\n    \
             harbor [OPTIONS]\n    \
             harbor check [OPTIONS]\n    \
+            harbor log [OPTIONS]\n    \
             harbor mime <FILE>...\n\n\
         COMMANDS:\n    \
             check                Validate configuration file syntax and paths\n    \
+            log                  View or clear background organization history\n    \
             mime <FILE>...       Inspect detected MIME type of files\n\n\
         OPTIONS:\n    \
             -c, --config <PATH>  Path to configuration file\n    \
             -n, --dry-run        Simulate moves without touching files on disk\n    \
             -h, --help           Print help information\n    \
-            -v, --version        Print version information",
+            -v, --version        Print version information\n\n\
+        LOG OPTIONS:\n    \
+            -n, --lines <NUM>    Number of log lines to show (default: 40)\n    \
+            -c, --clear          Clear log history file",
         env!("CARGO_PKG_VERSION")
     );
 }

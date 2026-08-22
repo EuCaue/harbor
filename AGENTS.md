@@ -8,6 +8,7 @@ Written in Rust.
 - `cargo run` — build + run daemon (foreground)
 - `cargo run -- --dry-run` — simulate moves without touching files
 - `cargo run -- check` — validate configuration syntax and paths
+- `cargo run -- log` — view organization history
 - `cargo run -- mime <file>...` — inspect MIME type of files
 - `cargo build --release` — release binary
 - `cargo test` — run tests
