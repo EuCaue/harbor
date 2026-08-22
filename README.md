@@ -7,56 +7,49 @@
 
 Files land. Harbor moves. Done.
 
-Fast file organizer. Watches folders. Moves or copies files based on rules. Zero async runtime. No fluff.
+Fast file organizer daemon. Watches folders. Moves or copies files based on rules. Zero async runtime. Minimal dependencies.
 
 ## Why Harbor?
 
-* **Simple.** One binary. One config.
-* **Light.** Threads + channels. No Tokio. No bloat.
-* **Smart.** Waits for downloads to finish before moving.
-* **Safe.** Dedups files. Handles cross-device moves.
+* **Simple:** One binary. One config.
+* **Light:** Native threads and channels. No Tokio. No bloat.
+* **Smart:** Waits for downloads to finish before moving.
+* **Safe:** Deduplicates files on name collisions. Handles cross-device moves.
+* **Flexible:** Matches by extension glob, MIME magic bytes, size limits, and date patterns.
 
 ## Install
 
-**Easy way:**
-Grab the binary for Linux, Mac, or Windows from the [Releases](../../releases) page. Put it in your PATH.
+**Download binary:**
+Grab the binary for Linux, macOS, or Windows from the [Releases](../../releases) page. Put it in your PATH.
 
-**Build way:**
+**Build from source:**
 ```sh
 cargo build --release
 sudo cp target/release/harbor /usr/local/bin/
 ```
 
-## Run
+## Commands
 
-Start Harbor with default config (`~/.config/harbor/config.toml`):
 ```sh
+# Start daemon with default config (~/.config/harbor/config.toml)
 harbor
-```
 
-Or pass a custom config path:
-```sh
+# Start daemon with custom config
 harbor -c /path/to/custom-config.toml
-```
-No config file yet? Harbor automatically creates an initial template at `~/.config/harbor/config.toml` on first run.
-It runs in the foreground. To keep it alive in the background, use `systemd` (Linux), `launchd` (Mac), or the **Startup folder** / Task Scheduler (Windows).
 
-### CLI Commands & Flags
-
-```sh
-# Validate configuration file and folder paths
+# Validate configuration syntax, rules, and paths
 harbor check
 
 # Simulate moves without touching files (dry-run)
 harbor --dry-run
-harbor -n -c /path/to/custom.toml
+harbor -n -c /path/to/custom-config.toml
 
-# View or clear organization history
+# View or clear background organization history
 harbor log
-harbor log -n 100
+harbor log -n 50
 harbor log --clear
 
-# Inspect file MIME types
+# Inspect file MIME types directly
 harbor mime photo.png document.pdf archive.zip
 
 # Print help or version
@@ -66,60 +59,74 @@ harbor --version
 
 ## Configure
 
-See [`config.toml.example`](config.toml.example) for a full setup.
+On first run without a config, Harbor automatically creates a safe template at `~/.config/harbor/config.toml`.
 
-Rules match top to bottom. First match wins. Within a single rule, `match` (glob) is evaluated first before `mime`.
+See [`config.toml.example`](config.toml.example) for a full setup.
 
 ```toml
 [defaults]
 to = "$HOME/Downloads/organized"
 wait = 5
+overwrite = false
 include_dirs = false
+
+[ignore]
+match = ["*.part", "*.crdownload", "*.tmp", ".*"]
 
 [[folder]]
 path = "$HOME/Downloads"
 
   [[folder.rule]]
   name = "Photos by Date"
-  match = "*.{jpg,png}"
+  match = "*.{jpg,jpeg,png,webp}"
   to = "$HOME/Pictures/{year}/{month}"
 
   [[folder.rule]]
   name = "Large Archives"
-  match = "*.{zip,tar.gz,iso}"
+  match = "*.{zip,tar.gz,7z,iso}"
   min_size = "500MB"
   to = "$HOME/Archives/Large"
 
   [[folder.rule]]
-  name = "Images Fallback"
+  name = "Images (MIME fallback)"
   mime = "image/*"
   to = "$HOME/Pictures/{year}/{month}"
 
   [[folder.rule]]
   name = "Documents"
+  match = "*.{pdf,doc,docx,txt,xlsx,epub,md}"
   mime = ["application/pdf", "text/*"]
   to = "$HOME/Documents"
 
   [[folder.rule]]
+  name = "Other"
   match = "*"
-  to = "$HOME/Misc"
+  to = "$HOME/Downloads/Other"
 ```
 
 ## Core Behavior
 
-* **Rule Precedence:** Evaluated top-to-bottom. Within a rule: size filter -> `match` (extension glob) -> `mime` (magic bytes / MIME type).
-* **Date Variables:** Destination `to` paths support `{year}`, `{month}`, `{day}`, and `{date}` (expanded based on file modification date).
-* **Size Filters:** Rules accept `min_size` and `max_size` (e.g. `500MB`, `10KB`, `1GB`).
-* **Startup Sweep:** On startup, Harbor scans existing files and folders, organizes non-conforming items, then starts watching.
-* **Cooldown:** Waits for file size to stop changing. No moving half-downloaded files.
-* **Dedup:** Conflict? Harbor renames to `name_1.ext`. Or set `overwrite = true` to overwrite.
-* **Directories:** Set `include_dirs = true` to also organize folders.
-* **Cross-device:** Uses atomic `rename`. Falls back to copy+delete across partitions.
-* **Ignore:** Skips `*.part` or `*.tmp` out of the box.
+* **Rule Precedence:** Rules evaluate top-to-bottom. Inside each rule:
+  1. `min_size` / `max_size` (file size filter)
+  2. `match` (fast in-memory glob match)
+  3. `mime` (file magic bytes check)
+* **Date Variables:** Dynamic tokens in destination paths expand based on file modification date:
+  * `{year}` or `{YYYY}`: e.g. `2026`
+  * `{month}` or `{MM}`: e.g. `08`
+  * `{day}` or `{DD}`: e.g. `22`
+  * `{date}`: e.g. `2026-08-22`
+* **Size Filters:** Rules accept `min_size` and `max_size` (units: `B`, `KB`, `MB`, `GB`).
+* **Startup Sweep:** Scans existing items on launch and organizes non-conforming files before watching.
+* **Cooldown:** Tracks file size and mtime each tick to avoid touching active downloads.
+* **Dedup:** On filename conflict, renames to `name_1.ext`, `name_2.ext` (or set `overwrite = true`).
+* **Directories:** Set `include_dirs = true` to organize whole folders.
+* **Cross-device:** Uses atomic `rename`; falls back to copy+delete across disk partitions.
+* **Ignore:** Skips temporary files (`*.part`, `*.tmp`, hidden files).
 
 ## Contribute
 
 Keep it small. Standard library first. No unnecessary abstractions.
+
 ```sh
 cargo test
 cargo clippy
